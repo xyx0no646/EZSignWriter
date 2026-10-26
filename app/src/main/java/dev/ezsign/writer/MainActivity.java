@@ -81,6 +81,7 @@ public final class MainActivity extends Activity {
         if (nfc == null) {
             status.setText("NFCに対応していません");
             writeButton.setEnabled(false);
+            handleSharedImageIntent(getIntent());
             return;
         }
 
@@ -97,6 +98,8 @@ public final class MainActivity extends Activity {
         nfcIntent =
                 PendingIntent.getActivity(
                         this, 0, intent, flags);
+
+        handleSharedImageIntent(getIntent());
     }
 
     private void buildUi() {
@@ -439,7 +442,41 @@ public final class MainActivity extends Activity {
 
         Uri uri = data.getData();
         if (uri == null) return;
+        loadImage(uri);
+    }
 
+    private void handleSharedImageIntent(Intent intent) {
+        if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction())) {
+            return;
+        }
+        if (busy) {
+            status.setText("書き込み中は共有画像を受け取れません");
+            return;
+        }
+        if (intent.getType() == null || !intent.getType().startsWith("image/")) {
+            status.setText("画像ファイルを共有してください");
+            return;
+        }
+        Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        if (uri == null && intent.getClipData() != null
+                && intent.getClipData().getItemCount() > 0) {
+            uri = intent.getClipData().getItemAt(0).getUri();
+        }
+        if (uri == null) {
+            status.setText("共有された画像を取得できませんでした");
+            return;
+        }
+
+        if (armed) {
+            armed = false;
+            disableForegroundNfc();
+            setEditorEnabled(true);
+            writeButton.setText("NFCに書き込む");
+        }
+        loadImage(uri);
+    }
+
+    private void loadImage(Uri uri) {
         try {
             Bitmap decoded =
                     decodeSampled(uri, 2048);
@@ -459,7 +496,7 @@ public final class MainActivity extends Activity {
             outputPreviewButton.setText("仕上がり");
 
             progress.setProgress(0);
-            writeButton.setEnabled(true);
+            writeButton.setEnabled(nfc != null);
 
             status.setText(
                     "ピンチで拡大縮小・ドラッグで移動・ダブルタップでリセット");
@@ -592,6 +629,12 @@ public final class MainActivity extends Activity {
     @Override protected void onNewIntent(
             Intent intent) {
         super.onNewIntent(intent);
+
+        if (Intent.ACTION_SEND.equals(intent.getAction())) {
+            setIntent(intent);
+            handleSharedImageIntent(intent);
+            return;
+        }
 
         boolean tagAction =
                 NfcAdapter.ACTION_TAG_DISCOVERED
