@@ -36,13 +36,17 @@ final class PixelPacker {
         int ppb = bpp == 2 ? 4 : 8;
         if (bpp != 1 && bpp != 2) throw new IllegalArgumentException("Unsupported bpp: " + bpp);
         if (tw % ppb != 0) throw new IllegalArgumentException("Packed width not divisible by " + ppb + ": " + tw);
+
+        // Wire format: byte groups advance left -> right across each row.
+        // Within each group the rightmost pixel is p0 (LSB).
         byte[] out = new byte[(tw / ppb) * th];
         int o = 0;
         for (int y = 0; y < th; y++) {
-            for (int x = tw - 1; x >= 0; x -= ppb) {
+            for (int group = 0; group < tw; group += ppb) {
+                int right = group + ppb - 1;
                 int v = 0;
                 for (int k = 0; k < ppb; k++) {
-                    int color = pixels[y * tw + (x - k)];
+                    int color = pixels[y * tw + (right - k)];
                     if (bpp == 1) v |= (color & 1) << k;
                     else v |= (color & 3) << (k * 2);
                 }
