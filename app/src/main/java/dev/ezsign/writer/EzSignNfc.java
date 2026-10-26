@@ -36,11 +36,11 @@ final class EzSignNfc {
             byte[] select = tx(iso, Protocol.SELECT_AID);
             if (!Protocol.isOk(select)) {
                 listener.onStatus(
-                        "SELECT " + Protocol.sw(select) + " (continue)");
+                        "初期化応答 " + Protocol.sw(select) + "（続行）");
             }
 
             listener.onStatus("認証中");
-            expectOk(tx(iso, Protocol.認証中), "認証中");
+            expectOk(tx(iso, Protocol.AUTH), "認証");
 
             listener.onStatus("機種情報を読み取り中");
             DeviceInfo info =
@@ -63,7 +63,7 @@ final class EzSignNfc {
             iso.setTimeout(60000);
 
             try {
-                expectOk(tx(iso, Protocol.REFRESH), "REFRESH");
+                expectOk(tx(iso, Protocol.REFRESH), "画面更新");
             } catch (TagLostException lost) {
                 throw new IOException(
                         "更新待ち中にタグが離れました。"
@@ -92,7 +92,7 @@ final class EzSignNfc {
         }
 
         listener.onStatus(
-                "書き込み " + data.length + " バイト / "
+                "書き込み中 " + data.length + " バイト / "
                         + chunks + " パケット");
 
         for (int seq = 0; seq < chunks; seq++) {
@@ -106,8 +106,8 @@ final class EzSignNfc {
 
             if (!Protocol.isOk(response)) {
                 throw new IOException(
-                        "書き込み packet " + seq
-                                + " 失敗: SW="
+                        "書き込みパケット " + seq
+                                + " で失敗: SW="
                                 + Protocol.sw(response));
             }
 
@@ -126,7 +126,7 @@ final class EzSignNfc {
             throws IOException {
         if (!Protocol.isOk(response)) {
             throw new IOException(
-                    what + " 失敗: SW="
+                    what + "に失敗しました: SW="
                             + Protocol.sw(response));
         }
     }
