@@ -15,7 +15,8 @@ final class EzSignNfc {
 
     private EzSignNfc() {}
 
-    static void write(Tag tag, android.graphics.Bitmap source, Listener listener) throws Exception {
+    static void write(Tag tag, android.graphics.Bitmap source, boolean mirrorCorrection,
+                      Listener listener) throws Exception {
         IsoDep iso = IsoDep.get(tag);
         if (iso == null) throw new IOException("IsoDepではないNFCタグです");
         try {
@@ -33,7 +34,7 @@ final class EzSignNfc {
             DeviceInfo info = DeviceInfo.parse(tx(iso, Protocol.DEVICE_INFO));
             listener.onStatus(info.summary());
 
-            ImagePipeline.Result image = ImagePipeline.prepare(source, info);
+            ImagePipeline.Result image = ImagePipeline.prepare(source, info, mirrorCorrection);
             listener.onDevice(info, image.preview);
 
             writeRaw(iso, image.bytes, listener);
