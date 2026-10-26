@@ -29,11 +29,8 @@ final class ImagePipeline {
         Bitmap fitted = centerCrop(source, spec.width, spec.height);
         int[] indices = atkinson(fitted, spec.colors);
 
-        // Preview always shows the intended human-readable orientation.
         Bitmap preview = render(indices, spec.width, spec.height);
 
-        // Some EZ Sign firmware/panel combinations present the received image
-        // mirrored. Apply the correction only to the wire buffer, not preview.
         int[] wireIndices = mirrorCorrection
                 ? flipHorizontal(indices, spec.width, spec.height)
                 : indices;
@@ -42,6 +39,14 @@ final class ImagePipeline {
                 wireIndices, spec.width, spec.height, spec.bpp, spec.transform);
         if (fitted != source && fitted != preview) fitted.recycle();
         return new Result(preview, packed.bytes, packed.width, packed.height);
+    }
+
+    static Bitmap preview(Bitmap source, int width, int height, int colors) {
+        Bitmap fitted = centerCrop(source, width, height);
+        int[] indices = atkinson(fitted, colors);
+        Bitmap out = render(indices, width, height);
+        if (fitted != source && fitted != out) fitted.recycle();
+        return out;
     }
 
     private static int[] flipHorizontal(int[] src, int w, int h) {
