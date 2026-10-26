@@ -5,7 +5,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="EZ Sign Writer"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
