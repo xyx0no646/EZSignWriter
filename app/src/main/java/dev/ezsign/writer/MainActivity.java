@@ -3,6 +3,7 @@ package dev.ezsign.writer;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -29,6 +30,9 @@ import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private static final int PICK_IMAGE = 7;
+    private static final String PREFS = "ezsign";
+    private static final String PREF_LARGE = "preview_large";
+    private static final String PREF_COLORS = "preview_colors";
 
     private NfcAdapter nfc;
     private PendingIntent nfcIntent;
@@ -36,11 +40,15 @@ public final class MainActivity extends Activity {
     private Bitmap processedPreview;
     private volatile boolean armed;
     private volatile boolean busy;
+    private volatile boolean previewBusy;
+    private boolean previewLarge;
+    private int previewColors = 4;
 
     private ImageView preview;
     private TextView status;
     private Button pickButton;
     private Button writeButton;
+    private Button previewSizeButton;
     private CheckBox mirrorCheck;
     private ProgressBar progress;
 
@@ -49,6 +57,11 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        previewLarge = prefs.getBoolean(PREF_LARGE, false);
+        previewColors = prefs.getInt(PREF_COLORS, 4);
+
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
@@ -107,13 +120,22 @@ public final class MainActivity extends Activity {
         status.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         root.addView(status, lp(-1, -2, 0));
 
+        LinearLayout options = new LinearLayout(this);
+        options.setOrientation(LinearLayout.HORIZONTAL);
+
+        previewSizeButton = makeButton("");
+        updatePreviewButtonText();
+        options.addView(previewSizeButton, lp(0, dp(44), 1));
+
         mirrorCheck = new CheckBox(this);
         mirrorCheck.setText("MIRROR FIX");
         mirrorCheck.setTextColor(Color.BLACK);
-        mirrorCheck.setTextSize(13);
+        mirrorCheck.setTextSize(12);
         mirrorCheck.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         mirrorCheck.setChecked(true);
-        root.addView(mirrorCheck, margins(lp(-1, dp(44), 0), 0, 0, 0, dp(6)));
+        options.addView(mirrorCheck, lp(0, dp(44), 1));
+
+        root.addView(options, margins(lp(-1, -2, 0), 0, 0, 0, dp(6)));
 
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
@@ -126,8 +148,19 @@ public final class MainActivity extends Activity {
         root.addView(buttons, margins(lp(-1, -2, 0), 0, dp(4), 0, 0));
 
         pickButton.setOnClickListener(v -> chooseImage());
+        previewSizeButton.setOnClickListener(v -> {
+            if (busy || previewBusy) return;
+            previewLarge = !previewLarge;
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_LARGE, previewLarge).apply();
+            updatePreviewButtonText();
+            if (sourceBitmap != null) renderWritePreview();
+        });
         writeButton.setOnClickListener(v -> toggleArm());
         setContentView(root);
+    }
+
+    private void updatePreviewButtonText() {
+        previewSizeButton.setText(previewLarge ? "PREVIEW 4.2″" : "PREVIEW 2.9″");
     }
 
     private Button makeButton(String text) {
@@ -142,7 +175,7 @@ public final class MainActivity extends Activity {
     private View space(int px) { View v = new View(this); v.setMinimumWidth(px); return v; }
 
     private void chooseImage() {
-        if (busy) return;
+        if (busy || previewBusy) return;
         Intent i = new Intent(Intent.ACTION_GET_CONTENT);
         i.setType("image/*");
         i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -159,13 +192,51 @@ public final class MainActivity extends Activity {
             if (b == null) throw new IllegalArgumentException("Image decode failed");
             if (sourceBitmap != null) sourceBitmap.recycle();
             sourceBitmap = b;
-            preview.setImageBitmap(sourceBitmap);
-            status.setText("READY — PRESS WRITE NFC");
-            writeButton.setEnabled(true);
             progress.setProgress(0);
+            writeButton.setEnabled(true);
+            renderWritePreview();
         } catch (Exception e) {
             status.setText("IMAGE ERROR: " + e.getMessage());
         }
+    }
+
+    private void renderWritePreview() {
+        if (sourceBitmap == null || busy || previewBusy) return;
+        previewBusy = true;
+        pickButton.setEnabled(false);
+        previewSizeButton.setEnabled(false);
+        writeButton.setEnabled(false);
+
+        final int w = previewLarge ? 400 : 296;
+        final int h = previewLarge ? 300 : 128;
+        final int colors = previewColors == 2 ? 2 : 4;
+        status.setText("PREVIEW " + w + "×" + h + " · " + colors + " COLORS");
+
+        worker.execute(() -> {
+            try {
+                Bitmap p = ImagePipeline.preview(sourceBitmap, w, h, colors);
+                ui.post(() -> {
+                    if (processedPreview != null && processedPreview != p && processedPreview != sourceBitmap) {
+                        processedPreview.recycle();
+                    }
+                    processedPreview = p;
+                    preview.setImageBitmap(p);
+                    status.setText("WRITE AREA " + w + "×" + h + " · CENTER CROP");
+                    previewBusy = false;
+                    pickButton.setEnabled(true);
+                    previewSizeButton.setEnabled(true);
+                    writeButton.setEnabled(true);
+                });
+            } catch (Exception e) {
+                ui.post(() -> {
+                    previewBusy = false;
+                    pickButton.setEnabled(true);
+                    previewSizeButton.setEnabled(true);
+                    writeButton.setEnabled(sourceBitmap != null);
+                    status.setText("PREVIEW ERROR: " + compact(e.getMessage()));
+                });
+            }
+        });
     }
 
     private Bitmap decodeSampled(Uri uri, int maxSide) throws Exception {
@@ -188,9 +259,10 @@ public final class MainActivity extends Activity {
     }
 
     private void toggleArm() {
-        if (sourceBitmap == null || busy) return;
+        if (sourceBitmap == null || busy || previewBusy) return;
         armed = !armed;
         pickButton.setEnabled(!armed);
+        previewSizeButton.setEnabled(!armed);
         mirrorCheck.setEnabled(!armed);
         if (armed) {
             status.setText("ARMED — TOUCH EZ SIGN TO PHONE");
@@ -245,6 +317,7 @@ public final class MainActivity extends Activity {
         armed = false;
         disableForegroundNfc();
         pickButton.setEnabled(false);
+        previewSizeButton.setEnabled(false);
         mirrorCheck.setEnabled(false);
         writeButton.setEnabled(false);
         writeButton.setText("WRITING");
@@ -258,7 +331,17 @@ public final class MainActivity extends Activity {
                     @Override public void onProgress(int percent) { ui.post(() -> progress.setProgress(percent)); }
                     @Override public void onDevice(DeviceInfo info, Bitmap p) {
                         ui.post(() -> {
-                            if (processedPreview != null && processedPreview != p) processedPreview.recycle();
+                            previewLarge = info.width >= 400;
+                            previewColors = info.colors;
+                            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                                    .putBoolean(PREF_LARGE, previewLarge)
+                                    .putInt(PREF_COLORS, previewColors)
+                                    .apply();
+                            updatePreviewButtonText();
+
+                            if (processedPreview != null && processedPreview != p && processedPreview != sourceBitmap) {
+                                processedPreview.recycle();
+                            }
                             processedPreview = p;
                             preview.setImageBitmap(p);
                             status.setText(info.summary() + (mirrorCorrection ? " · MIRROR FIX" : "") + " — WRITE");
@@ -275,6 +358,7 @@ public final class MainActivity extends Activity {
     private void finishWrite(boolean ok, String message) {
         busy = false;
         pickButton.setEnabled(true);
+        previewSizeButton.setEnabled(true);
         mirrorCheck.setEnabled(true);
         writeButton.setEnabled(sourceBitmap != null);
         writeButton.setText("WRITE NFC");
