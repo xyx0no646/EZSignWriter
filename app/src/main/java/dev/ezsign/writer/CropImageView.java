@@ -394,7 +394,7 @@ public final class CropImageView extends View {
                     localCrop, white);
 
             canvas.drawText(
-                    "SELECT IMAGE",
+                    "画像を選択",
                     localCrop.centerX(),
                     localCrop.centerY(),
                     helpPaint);

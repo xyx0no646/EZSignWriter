@@ -29,7 +29,7 @@ final class EzSignNfc {
         }
 
         try {
-            listener.onStatus("CONNECT");
+            listener.onStatus("接続中");
             iso.connect();
             iso.setTimeout(5000);
 
@@ -39,10 +39,10 @@ final class EzSignNfc {
                         "SELECT " + Protocol.sw(select) + " (continue)");
             }
 
-            listener.onStatus("AUTH");
-            expectOk(tx(iso, Protocol.AUTH), "AUTH");
+            listener.onStatus("認証中");
+            expectOk(tx(iso, Protocol.認証中), "認証中");
 
-            listener.onStatus("READ DEVICE");
+            listener.onStatus("機種情報を読み取り中");
             DeviceInfo info =
                     DeviceInfo.parse(tx(iso, Protocol.DEVICE_INFO));
             listener.onStatus(info.summary());
@@ -58,7 +58,7 @@ final class EzSignNfc {
 
             writeRaw(iso, image.bytes, listener);
 
-            listener.onStatus("REFRESH — KEEP TOUCHING");
+            listener.onStatus("画面更新中 — そのままかざしてください");
             listener.onProgress(100);
             iso.setTimeout(60000);
 
@@ -71,7 +71,7 @@ final class EzSignNfc {
                         lost);
             }
 
-            listener.onStatus("DONE");
+            listener.onStatus("完了");
         } finally {
             try {
                 if (iso.isConnected()) iso.close();
@@ -87,13 +87,13 @@ final class EzSignNfc {
 
         if (chunks > 256) {
             throw new IOException(
-                    "Raw transfer exceeds one-byte sequence space: "
+                    "送信パケット数が上限を超えました: "
                             + chunks);
         }
 
         listener.onStatus(
-                "WRITE " + data.length + " bytes / "
-                        + chunks + " packets");
+                "書き込み " + data.length + " バイト / "
+                        + chunks + " パケット");
 
         for (int seq = 0; seq < chunks; seq++) {
             int start = seq * chunkSize;
@@ -106,8 +106,8 @@ final class EzSignNfc {
 
             if (!Protocol.isOk(response)) {
                 throw new IOException(
-                        "WRITE packet " + seq
-                                + " failed: SW="
+                        "書き込み packet " + seq
+                                + " 失敗: SW="
                                 + Protocol.sw(response));
             }
 
@@ -126,7 +126,7 @@ final class EzSignNfc {
             throws IOException {
         if (!Protocol.isOk(response)) {
             throw new IOException(
-                    what + " failed: SW="
+                    what + " 失敗: SW="
                             + Protocol.sw(response));
         }
     }

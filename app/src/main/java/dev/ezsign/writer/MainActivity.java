@@ -79,7 +79,7 @@ public final class MainActivity extends Activity {
 
         nfc = NfcAdapter.getDefaultAdapter(this);
         if (nfc == null) {
-            status.setText("NO NFC HARDWARE");
+            status.setText("NFCに対応していません");
             writeButton.setEnabled(false);
             return;
         }
@@ -108,7 +108,7 @@ public final class MainActivity extends Activity {
                 Color.rgb(238, 238, 234));
 
         TextView title = new TextView(this);
-        title.setText("EZ SIGN WRITER");
+        title.setText("EZ Sign ライター");
         title.setTextColor(Color.BLACK);
         title.setTextSize(24);
         title.setTypeface(
@@ -119,7 +119,7 @@ public final class MainActivity extends Activity {
 
         TextView sub = new TextView(this);
         sub.setText(
-                "PINCH / DRAG · DOUBLE TAP RESET");
+                "ピンチで拡大縮小・ドラッグで移動・ダブルタップでリセット");
         sub.setTextColor(Color.DKGRAY);
         sub.setTextSize(12);
         sub.setTypeface(Typeface.MONOSPACE);
@@ -149,7 +149,7 @@ public final class MainActivity extends Activity {
                         0, dp(14), 0, dp(10)));
 
         status = new TextView(this);
-        status.setText("SELECT IMAGE");
+        status.setText("画像を選択");
         status.setTextColor(Color.BLACK);
         status.setTextSize(14);
         status.setMinHeight(dp(44));
@@ -173,7 +173,7 @@ public final class MainActivity extends Activity {
                 lp(0, dp(44), 1));
 
         resetButton =
-                makeButton("RESET");
+                makeButton("リセット");
         options.addView(
                 space(dp(8)),
                 lp(dp(8), 1, 0));
@@ -182,7 +182,7 @@ public final class MainActivity extends Activity {
                 lp(0, dp(44), 1));
 
         outputPreviewButton =
-                makeButton("OUTPUT");
+                makeButton("仕上がり");
         options.addView(
                 space(dp(8)),
                 lp(dp(8), 1, 0));
@@ -192,7 +192,7 @@ public final class MainActivity extends Activity {
 
         mirrorCheck =
                 new CheckBox(this);
-        mirrorCheck.setText("MIRROR FIX");
+        mirrorCheck.setText("左右反転補正");
         mirrorCheck.setTextColor(Color.BLACK);
         mirrorCheck.setTextSize(12);
         mirrorCheck.setTypeface(
@@ -215,9 +215,9 @@ public final class MainActivity extends Activity {
                 LinearLayout.HORIZONTAL);
 
         pickButton =
-                makeButton("SELECT IMAGE");
+                makeButton("画像を選択");
         writeButton =
-                makeButton("WRITE NFC");
+                makeButton("NFCに書き込む");
         writeButton.setEnabled(false);
 
         buttons.addView(
@@ -247,9 +247,9 @@ public final class MainActivity extends Activity {
                     if (!busy) {
                         cropView.clearOutputPreview();
                         cropView.resetTransform();
-                        outputPreviewButton.setText("OUTPUT");
+                        outputPreviewButton.setText("仕上がり");
                         status.setText(
-                                "RESET · PINCH / DRAG");
+                                "リセット · PINCH / DRAG");
                     }
                 });
 
@@ -270,8 +270,8 @@ public final class MainActivity extends Activity {
 
         if (cropView.isShowingOutputPreview()) {
             cropView.clearOutputPreview();
-            outputPreviewButton.setText("OUTPUT");
-            status.setText("EDIT · PINCH / DRAG");
+            outputPreviewButton.setText("仕上がり");
+            status.setText("編集 · PINCH / DRAG");
             return;
         }
 
@@ -280,8 +280,8 @@ public final class MainActivity extends Activity {
         int h = previewLarge ? 300 : 128;
         int colors = previewColors == 2 ? 2 : 4;
         status.setText(
-                "RENDER " + w + "×" + h
-                        + " · " + colors + " COLORS");
+                "変換中 " + w + "×" + h
+                        + " · " + colors + "色");
 
         FutureTask<Bitmap> cropTask =
                 new FutureTask<>(
@@ -321,18 +321,18 @@ public final class MainActivity extends Activity {
 
                     processedPreview = rendered;
                     cropView.setOutputPreview(rendered);
-                    outputPreviewButton.setText("EDIT");
+                    outputPreviewButton.setText("編集");
                     outputPreviewButton.setEnabled(true);
                     status.setText(
-                            "OUTPUT PREVIEW · "
+                            "仕上がり PREVIEW · "
                                     + colors
-                                    + " COLORS");
+                                    + "色");
                 });
             } catch (Exception e) {
                 ui.post(() -> {
                     outputPreviewButton.setEnabled(true);
                     status.setText(
-                            "PREVIEW ERROR: "
+                            "プレビューエラー: "
                                     + compact(
                                     e.getMessage()));
                 });
@@ -347,14 +347,14 @@ public final class MainActivity extends Activity {
         savePreviewPrefs();
 
         cropView.clearOutputPreview();
-        outputPreviewButton.setText("OUTPUT");
+        outputPreviewButton.setText("仕上がり");
         applyPreviewSize();
 
         if (sourceBitmap != null) {
             status.setText(
                     previewLarge
-                            ? "4.2\" FRAME · PINCH / DRAG"
-                            : "2.9\" FRAME · PINCH / DRAG");
+                            ? "4.2インチ枠 · ピンチ/ドラッグで調整"
+                            : "2.9インチ枠 · ピンチ/ドラッグで調整");
         }
     }
 
@@ -373,8 +373,8 @@ public final class MainActivity extends Activity {
 
         previewSizeButton.setText(
                 previewLarge
-                        ? "PREVIEW 4.2\""
-                        : "PREVIEW 2.9\"");
+                        ? "4.2インチ"
+                        : "2.9インチ");
     }
 
     private void savePreviewPrefs() {
@@ -420,7 +420,7 @@ public final class MainActivity extends Activity {
 
         startActivityForResult(
                 Intent.createChooser(
-                        intent, "Select image"),
+                        intent, "画像を選択"),
                 PICK_IMAGE);
     }
 
@@ -446,7 +446,7 @@ public final class MainActivity extends Activity {
 
             if (decoded == null) {
                 throw new IOException(
-                        "Image decode failed");
+                        "画像を読み込めませんでした");
             }
 
             if (sourceBitmap != null) {
@@ -456,16 +456,16 @@ public final class MainActivity extends Activity {
             sourceBitmap = decoded;
             cropView.setImageBitmap(
                     sourceBitmap);
-            outputPreviewButton.setText("OUTPUT");
+            outputPreviewButton.setText("仕上がり");
 
             progress.setProgress(0);
             writeButton.setEnabled(true);
 
             status.setText(
-                    "PINCH / DRAG · DOUBLE TAP RESET");
+                    "ピンチで拡大縮小・ドラッグで移動・ダブルタップでリセット");
         } catch (Exception e) {
             status.setText(
-                    "IMAGE ERROR: "
+                    "画像エラー: "
                             + compact(e.getMessage()));
         }
     }
@@ -525,13 +525,13 @@ public final class MainActivity extends Activity {
 
         if (armed) {
             status.setText(
-                    "ARMED — TOUCH EZ SIGN TO PHONE");
-            writeButton.setText("CANCEL");
+                    "書き込み待機中 — EZ Signをスマホにかざしてください");
+            writeButton.setText("キャンセル");
             enableForegroundNfc();
         } else {
             status.setText(
-                    "READY — ADJUST OR WRITE");
-            writeButton.setText("WRITE NFC");
+                    "位置を調整するか、書き込みを開始してください");
+            writeButton.setText("NFCに書き込む");
             disableForegroundNfc();
         }
     }
@@ -556,7 +556,7 @@ public final class MainActivity extends Activity {
         if (nfc != null
                 && !nfc.isEnabled()) {
             status.setText(
-                    "NFC IS OFF");
+                    "NFCがオフです");
         }
     }
 
@@ -570,7 +570,7 @@ public final class MainActivity extends Activity {
                 || nfcIntent == null
                 || !nfc.isEnabled()) {
             status.setText(
-                    "NFC IS OFF — ENABLE NFC");
+                    "NFCがオフです — ENABLE NFC");
             return;
         }
 
@@ -621,7 +621,7 @@ public final class MainActivity extends Activity {
                 mirrorCheck.isChecked();
 
         cropView.clearOutputPreview();
-        outputPreviewButton.setText("OUTPUT");
+        outputPreviewButton.setText("仕上がり");
 
         busy = true;
         armed = false;
@@ -630,8 +630,8 @@ public final class MainActivity extends Activity {
 
         setEditorEnabled(false);
         writeButton.setEnabled(false);
-        writeButton.setText("WRITING");
-        status.setText("NFC DETECTED");
+        writeButton.setText("書き込み中");
+        status.setText("NFCを検出しました");
         progress.setProgress(1);
 
         worker.execute(() -> {
@@ -673,7 +673,7 @@ public final class MainActivity extends Activity {
                             status.setText(
                                     info.summary()
                                             + (mirrorCorrection
-                                            ? " · MIRROR FIX"
+                                            ? " · 左右反転補正"
                                             : "")
                                             + " — WRITE");
                         });
@@ -683,12 +683,12 @@ public final class MainActivity extends Activity {
                 ui.post(
                         () -> finishWrite(
                                 true,
-                                "DONE — REMOVE TAG"));
+                                "完了 — EZ Signを離してください"));
             } catch (Exception e) {
                 ui.post(
                         () -> finishWrite(
                                 false,
-                                "ERROR — "
+                                "エラー — "
                                         + compact(
                                         e.getMessage())));
             }
@@ -715,11 +715,11 @@ public final class MainActivity extends Activity {
                 applyPreviewSize();
 
                 status.setText(
-                        "TAG IS "
+                        "タグは "
                                 + info.width
                                 + "×"
                                 + info.height
-                                + " — ADJUST FRAME & TRY AGAIN");
+                                + " です — 枠を調整してもう一度書き込んでください");
             });
 
             throw new IOException(
@@ -758,11 +758,11 @@ public final class MainActivity extends Activity {
         busy = false;
 
         setEditorEnabled(true);
-        outputPreviewButton.setText("OUTPUT");
+        outputPreviewButton.setText("仕上がり");
 
         writeButton.setEnabled(
                 cropView.hasImage());
-        writeButton.setText("WRITE NFC");
+        writeButton.setText("NFCに書き込む");
         status.setText(message);
 
         if (!ok) {
