@@ -29,6 +29,7 @@ public final class CropImageView extends View {
     private final GestureDetector gestureDetector;
 
     private Bitmap bitmap;
+    private Bitmap outputPreview;
     private int targetW = 296;
     private int targetH = 128;
     private int viewW;
@@ -155,8 +156,24 @@ public final class CropImageView extends View {
     public synchronized void setImageBitmap(
             Bitmap value) {
         bitmap = value;
+        outputPreview = null;
         resetTransformLocked();
         invalidate();
+    }
+
+    public synchronized void setOutputPreview(
+            Bitmap value) {
+        outputPreview = value;
+        invalidate();
+    }
+
+    public synchronized void clearOutputPreview() {
+        outputPreview = null;
+        invalidate();
+    }
+
+    public synchronized boolean isShowingOutputPreview() {
+        return outputPreview != null;
     }
 
     public synchronized boolean hasImage() {
@@ -313,6 +330,7 @@ public final class CropImageView extends View {
                         230, 230, 226));
 
         Bitmap localBitmap;
+        Bitmap localOutputPreview;
         RectF localCrop =
                 new RectF();
         float centerX;
@@ -321,13 +339,25 @@ public final class CropImageView extends View {
 
         synchronized (this) {
             localBitmap = bitmap;
+            localOutputPreview = outputPreview;
             localCrop.set(cropRect);
             centerX = sourceCenterX;
             centerY = sourceCenterY;
             scale = drawScaleLocked();
         }
 
-        if (localBitmap != null
+        if (localOutputPreview != null
+                && !localCrop.isEmpty()) {
+            int save = canvas.save();
+            canvas.clipRect(localCrop);
+            canvas.drawColor(Color.WHITE);
+            canvas.drawBitmap(
+                    localOutputPreview,
+                    null,
+                    localCrop,
+                    bitmapPaint);
+            canvas.restoreToCount(save);
+        } else if (localBitmap != null
                 && !localCrop.isEmpty()) {
             int save =
                     canvas.save();
@@ -409,6 +439,16 @@ public final class CropImageView extends View {
             MotionEvent event) {
         if (!isEnabled()) {
             return false;
+        }
+
+        synchronized (this) {
+            if (outputPreview != null
+                    && event.getActionMasked()
+                    == MotionEvent.ACTION_DOWN) {
+                outputPreview = null;
+                invalidate();
+                return true;
+            }
         }
 
         gestureDetector.onTouchEvent(event);

@@ -53,6 +53,7 @@ public final class MainActivity extends Activity {
     private Button writeButton;
     private Button previewSizeButton;
     private Button resetButton;
+    private Button outputPreviewButton;
     private CheckBox mirrorCheck;
     private ProgressBar progress;
 
@@ -180,6 +181,15 @@ public final class MainActivity extends Activity {
                 resetButton,
                 lp(0, dp(44), 1));
 
+        outputPreviewButton =
+                makeButton("OUTPUT");
+        options.addView(
+                space(dp(8)),
+                lp(dp(8), 1, 0));
+        options.addView(
+                outputPreviewButton,
+                lp(0, dp(44), 1));
+
         mirrorCheck =
                 new CheckBox(this);
         mirrorCheck.setText("MIRROR FIX");
@@ -235,11 +245,16 @@ public final class MainActivity extends Activity {
         resetButton.setOnClickListener(
                 v -> {
                     if (!busy) {
+                        cropView.clearOutputPreview();
                         cropView.resetTransform();
+                        outputPreviewButton.setText("OUTPUT");
                         status.setText(
                                 "RESET · PINCH / DRAG");
                     }
                 });
+
+        outputPreviewButton.setOnClickListener(
+                v -> toggleOutputPreview());
 
         writeButton.setOnClickListener(
                 v -> toggleArm());
@@ -248,12 +263,91 @@ public final class MainActivity extends Activity {
         applyPreviewSize();
     }
 
+    private void toggleOutputPreview() {
+        if (busy || armed || !cropView.hasImage()) {
+            return;
+        }
+
+        if (cropView.isShowingOutputPreview()) {
+            cropView.clearOutputPreview();
+            outputPreviewButton.setText("OUTPUT");
+            status.setText("EDIT · PINCH / DRAG");
+            return;
+        }
+
+        outputPreviewButton.setEnabled(false);
+        int w = previewLarge ? 400 : 296;
+        int h = previewLarge ? 300 : 128;
+        int colors = previewColors == 2 ? 2 : 4;
+        status.setText(
+                "RENDER " + w + "×" + h
+                        + " · " + colors + " COLORS");
+
+        FutureTask<Bitmap> cropTask =
+                new FutureTask<>(
+                        () -> cropView
+                                .renderCroppedBitmap(
+                                        w, h));
+
+        ui.post(cropTask);
+
+        worker.execute(() -> {
+            try {
+                Bitmap crop = cropTask.get();
+                if (crop == null) {
+                    throw new IOException(
+                            "Crop render failed");
+                }
+
+                Bitmap rendered =
+                        ImagePipeline.preview(
+                                crop,
+                                w,
+                                h,
+                                colors);
+
+                if (crop != rendered) {
+                    crop.recycle();
+                }
+
+                ui.post(() -> {
+                    if (processedPreview != null
+                            && processedPreview
+                            != rendered
+                            && processedPreview
+                            != sourceBitmap) {
+                        processedPreview.recycle();
+                    }
+
+                    processedPreview = rendered;
+                    cropView.setOutputPreview(rendered);
+                    outputPreviewButton.setText("EDIT");
+                    outputPreviewButton.setEnabled(true);
+                    status.setText(
+                            "OUTPUT PREVIEW · "
+                                    + colors
+                                    + " COLORS");
+                });
+            } catch (Exception e) {
+                ui.post(() -> {
+                    outputPreviewButton.setEnabled(true);
+                    status.setText(
+                            "PREVIEW ERROR: "
+                                    + compact(
+                                    e.getMessage()));
+                });
+            }
+        });
+    }
+
     private void togglePreviewSize() {
         if (busy || armed) return;
 
         previewLarge = !previewLarge;
         savePreviewPrefs();
 
+        cropView.clearOutputPreview();
+        outputPreviewButton.setText("OUTPUT");
         applyPreviewSize();
 
         if (sourceBitmap != null) {
@@ -362,6 +456,7 @@ public final class MainActivity extends Activity {
             sourceBitmap = decoded;
             cropView.setImageBitmap(
                     sourceBitmap);
+            outputPreviewButton.setText("OUTPUT");
 
             progress.setProgress(0);
             writeButton.setEnabled(true);
@@ -446,6 +541,7 @@ public final class MainActivity extends Activity {
         pickButton.setEnabled(enabled);
         previewSizeButton.setEnabled(enabled);
         resetButton.setEnabled(enabled);
+        outputPreviewButton.setEnabled(enabled);
         mirrorCheck.setEnabled(enabled);
         cropView.setEnabled(enabled);
     }
@@ -523,6 +619,9 @@ public final class MainActivity extends Activity {
     private void startWrite(Tag tag) {
         final boolean mirrorCorrection =
                 mirrorCheck.isChecked();
+
+        cropView.clearOutputPreview();
+        outputPreviewButton.setText("OUTPUT");
 
         busy = true;
         armed = false;
@@ -659,6 +758,7 @@ public final class MainActivity extends Activity {
         busy = false;
 
         setEditorEnabled(true);
+        outputPreviewButton.setText("OUTPUT");
 
         writeButton.setEnabled(
                 cropView.hasImage());
