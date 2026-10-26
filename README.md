@@ -29,7 +29,7 @@ EZ Sign / FMSC系のNFC電子ペーパーへ、Androidスマートフォンか�
 
 ## APKのダウンロード
 
-**[最新APKを直接ダウンロード（ZIP不要）](https://github.com/xyx0no646/EZSignWriter/releases/latest/download/EZSignWriter.apk)**
+**[最新APKを直接ダウンロード](https://github.com/xyx0no646/EZSignWriter/releases/latest/download/EZSignWriter.apk)**
 
 [ダウンロードページ（GitHub Releases）](https://github.com/xyx0no646/EZSignWriter/releases/latest)
 
