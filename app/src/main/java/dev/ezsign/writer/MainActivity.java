@@ -16,6 +16,7 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -40,6 +41,7 @@ public final class MainActivity extends Activity {
     private TextView status;
     private Button pickButton;
     private Button writeButton;
+    private CheckBox mirrorCheck;
     private ProgressBar progress;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -100,10 +102,18 @@ public final class MainActivity extends Activity {
         status.setText("SELECT IMAGE");
         status.setTextColor(Color.BLACK);
         status.setTextSize(14);
-        status.setMinHeight(dp(50));
+        status.setMinHeight(dp(42));
         status.setGravity(Gravity.CENTER_VERTICAL);
         status.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         root.addView(status, lp(-1, -2, 0));
+
+        mirrorCheck = new CheckBox(this);
+        mirrorCheck.setText("MIRROR FIX");
+        mirrorCheck.setTextColor(Color.BLACK);
+        mirrorCheck.setTextSize(13);
+        mirrorCheck.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        mirrorCheck.setChecked(true);
+        root.addView(mirrorCheck, margins(lp(-1, dp(44), 0), 0, 0, 0, dp(6)));
 
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
@@ -113,7 +123,7 @@ public final class MainActivity extends Activity {
         buttons.addView(pickButton, lp(0, dp(56), 1));
         buttons.addView(space(dp(10)), lp(dp(10), 1, 0));
         buttons.addView(writeButton, lp(0, dp(56), 1));
-        root.addView(buttons, margins(lp(-1, -2, 0), 0, dp(10), 0, 0));
+        root.addView(buttons, margins(lp(-1, -2, 0), 0, dp(4), 0, 0));
 
         pickButton.setOnClickListener(v -> chooseImage());
         writeButton.setOnClickListener(v -> toggleArm());
@@ -181,6 +191,7 @@ public final class MainActivity extends Activity {
         if (sourceBitmap == null || busy) return;
         armed = !armed;
         pickButton.setEnabled(!armed);
+        mirrorCheck.setEnabled(!armed);
         if (armed) {
             status.setText("ARMED — TOUCH EZ SIGN TO PHONE");
             writeButton.setText("CANCEL");
@@ -228,10 +239,13 @@ public final class MainActivity extends Activity {
     }
 
     private void startWrite(Tag tag) {
+        final boolean mirrorCorrection = mirrorCheck.isChecked();
+
         busy = true;
         armed = false;
         disableForegroundNfc();
         pickButton.setEnabled(false);
+        mirrorCheck.setEnabled(false);
         writeButton.setEnabled(false);
         writeButton.setText("WRITING");
         status.setText("NFC DETECTED");
@@ -239,7 +253,7 @@ public final class MainActivity extends Activity {
 
         worker.execute(() -> {
             try {
-                EzSignNfc.write(tag, sourceBitmap, new EzSignNfc.Listener() {
+                EzSignNfc.write(tag, sourceBitmap, mirrorCorrection, new EzSignNfc.Listener() {
                     @Override public void onStatus(String text) { ui.post(() -> status.setText(text)); }
                     @Override public void onProgress(int percent) { ui.post(() -> progress.setProgress(percent)); }
                     @Override public void onDevice(DeviceInfo info, Bitmap p) {
@@ -247,7 +261,7 @@ public final class MainActivity extends Activity {
                             if (processedPreview != null && processedPreview != p) processedPreview.recycle();
                             processedPreview = p;
                             preview.setImageBitmap(p);
-                            status.setText(info.summary() + " — WRITE");
+                            status.setText(info.summary() + (mirrorCorrection ? " · MIRROR FIX" : "") + " — WRITE");
                         });
                     }
                 });
@@ -261,6 +275,7 @@ public final class MainActivity extends Activity {
     private void finishWrite(boolean ok, String message) {
         busy = false;
         pickButton.setEnabled(true);
+        mirrorCheck.setEnabled(true);
         writeButton.setEnabled(sourceBitmap != null);
         writeButton.setText("WRITE NFC");
         status.setText(message);
