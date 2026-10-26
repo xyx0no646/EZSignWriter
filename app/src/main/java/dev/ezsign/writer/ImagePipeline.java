@@ -19,13 +19,18 @@ final class ImagePipeline {
         {0, 0, 0}, {255, 255, 255}
     };
 
+    private static final int FAMILY_GRAY = 0;
+    private static final int FAMILY_YELLOW = 1;
+    private static final int FAMILY_RED = 2;
+
     private ImagePipeline() {}
 
     static Result prepare(Bitmap source, DeviceInfo spec) {
         Bitmap fitted = centerCrop(source, spec.width, spec.height);
-        int[] indices = floydSteinberg(fitted, spec.colors);
+        int[] indices = atkinson(fitted, spec.colors);
         Bitmap preview = render(indices, spec.width, spec.height);
-        PixelPacker.Packed packed = PixelPacker.transformAndPack(indices, spec.width, spec.height, spec.bpp, spec.transform);
+        PixelPacker.Packed packed = PixelPacker.transformAndPack(
+                indices, spec.width, spec.height, spec.bpp, spec.transform);
         if (fitted != source && fitted != preview) fitted.recycle();
         return new Result(preview, packed.bytes, packed.width, packed.height);
     }
@@ -40,56 +45,118 @@ final class ImagePipeline {
         Matrix m = new Matrix();
         m.setScale(scale, scale);
         m.postTranslate(dx, dy);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         c.drawBitmap(source, m, p);
         return out;
     }
 
-    private static int[] floydSteinberg(Bitmap bitmap, int colors) {
+    // Higher-contrast Atkinson diffusion. It is less "wormy" than full
+    // Floyd-Steinberg on a low-resolution e-paper panel.
+    private static int[] atkinson(Bitmap bitmap, int colors) {
         int w = bitmap.getWidth();
         int h = bitmap.getHeight();
         int n = w * h;
         float[] r = new float[n];
         float[] g = new float[n];
         float[] b = new float[n];
+        int[] family = new int[n];
         int[] argb = new int[n];
         bitmap.getPixels(argb, 0, w, 0, 0, w, h);
+
         for (int i = 0; i < n; i++) {
             int c = argb[i];
             int a = Color.alpha(c);
-            r[i] = (Color.red(c) * a + 255 * (255 - a)) / 255f;
-            g[i] = (Color.green(c) * a + 255 * (255 - a)) / 255f;
-            b[i] = (Color.blue(c) * a + 255 * (255 - a)) / 255f;
+            float rr = (Color.red(c) * a + 255 * (255 - a)) / 255f;
+            float gg = (Color.green(c) * a + 255 * (255 - a)) / 255f;
+            float bb = (Color.blue(c) * a + 255 * (255 - a)) / 255f;
+            r[i] = rr;
+            g[i] = gg;
+            b[i] = bb;
+            family[i] = colors == 4 ? colorFamily(rr, gg, bb) : FAMILY_GRAY;
         }
 
-        int[][] palette = colors == 4 ? PALETTE4 : PALETTE2;
         int[] out = new int[n];
         for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
+            boolean reverse = (y & 1) != 0;
+            int x0 = reverse ? w - 1 : 0;
+            int xEnd = reverse ? -1 : w;
+            int step = reverse ? -1 : 1;
+
+            for (int x = x0; x != xEnd; x += step) {
                 int i = y * w + x;
                 float rr = clamp(r[i]);
                 float gg = clamp(g[i]);
                 float bb = clamp(b[i]);
-                int best = 0;
-                float bestD = Float.MAX_VALUE;
-                for (int p = 0; p < palette.length; p++) {
-                    float dr = rr - palette[p][0];
-                    float dg = gg - palette[p][1];
-                    float db = bb - palette[p][2];
-                    float d = dr * dr * 0.30f + dg * dg * 0.59f + db * db * 0.11f;
-                    if (d < bestD) { bestD = d; best = p; }
-                }
-                out[i] = best;
-                float er = rr - palette[best][0];
-                float eg = gg - palette[best][1];
-                float eb = bb - palette[best][2];
-                spread(r, g, b, w, h, x + 1, y,     er, eg, eb, 7f / 16f);
-                spread(r, g, b, w, h, x - 1, y + 1, er, eg, eb, 3f / 16f);
-                spread(r, g, b, w, h, x,     y + 1, er, eg, eb, 5f / 16f);
-                spread(r, g, b, w, h, x + 1, y + 1, er, eg, eb, 1f / 16f);
+
+                int chosen = nearestAllowed(rr, gg, bb, colors, family[i]);
+                out[i] = chosen;
+
+                int[][] palette = colors == 4 ? PALETTE4 : PALETTE2;
+                float er = rr - palette[chosen][0];
+                float eg = gg - palette[chosen][1];
+                float eb = bb - palette[chosen][2];
+
+                // Mirror Atkinson diffusion on odd rows to suppress directional banding.
+                spread(r,g,b,w,h,x + step,     y,     er,eg,eb,1f/8f);
+                spread(r,g,b,w,h,x + 2*step,   y,     er,eg,eb,1f/8f);
+                spread(r,g,b,w,h,x - step,     y + 1, er,eg,eb,1f/8f);
+                spread(r,g,b,w,h,x,            y + 1, er,eg,eb,1f/8f);
+                spread(r,g,b,w,h,x + step,     y + 1, er,eg,eb,1f/8f);
+                spread(r,g,b,w,h,x,            y + 2, er,eg,eb,1f/8f);
             }
         }
         return out;
+    }
+
+    // EZ Sign's four physical pigments are B/W/Y/R. Do not turn unsupported
+    // hues such as green/blue/purple into yellow just because RGB distance
+    // happens to make yellow numerically closest. Those hues are rendered as
+    // luminance (black/white dither) instead.
+    private static int colorFamily(float r, float g, float b) {
+        float max = Math.max(r, Math.max(g, b));
+        float min = Math.min(r, Math.min(g, b));
+        float chroma = max - min;
+        if (max < 1f || chroma < 42f || chroma / max < 0.24f) return FAMILY_GRAY;
+
+        float hue;
+        if (max == r) {
+            hue = 60f * (((g - b) / chroma) % 6f);
+        } else if (max == g) {
+            hue = 60f * (((b - r) / chroma) + 2f);
+        } else {
+            hue = 60f * (((r - g) / chroma) + 4f);
+        }
+        if (hue < 0f) hue += 360f;
+
+        // Keep yellow deliberately narrow so green does not become yellow.
+        if (hue >= 38f && hue <= 72f && b < 175f) return FAMILY_YELLOW;
+        if ((hue <= 24f || hue >= 342f) && r > g * 1.12f && r > b * 1.12f) return FAMILY_RED;
+        return FAMILY_GRAY;
+    }
+
+    private static int nearestAllowed(float r, float g, float b, int colors, int family) {
+        if (colors != 4 || family == FAMILY_GRAY) {
+            return luminance(r, g, b) >= 150f ? WHITE : BLACK;
+        }
+
+        int accent = family == FAMILY_YELLOW ? YELLOW : RED;
+        float blackD = distance(r,g,b,PALETTE4[BLACK]);
+        float whiteD = distance(r,g,b,PALETTE4[WHITE]);
+        float accentD = distance(r,g,b,PALETTE4[accent]);
+
+        if (accentD <= blackD && accentD <= whiteD) return accent;
+        return whiteD < blackD ? WHITE : BLACK;
+    }
+
+    private static float distance(float r, float g, float b, int[] p) {
+        float dr = r - p[0];
+        float dg = g - p[1];
+        float db = b - p[2];
+        return dr*dr*0.26f + dg*dg*0.66f + db*db*0.08f;
+    }
+
+    private static float luminance(float r, float g, float b) {
+        return 0.2126f*r + 0.7152f*g + 0.0722f*b;
     }
 
     private static void spread(float[] r, float[] g, float[] b, int w, int h,
