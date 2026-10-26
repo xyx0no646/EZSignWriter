@@ -29,11 +29,13 @@ EZ Sign / FMSC系のNFC電子ペーパーへ、Androidスマートフォンか�
 
 ## APKのダウンロード
 
-GitHub Actionsで毎回デバッグAPKを自動ビルドしています。
+**[最新APKを直接ダウンロード（ZIP不要）](https://github.com/xyx0no646/EZSignWriter/releases/latest/download/EZSignWriter.apk)**
 
-[APKビルド / ダウンロードページ](https://github.com/xyx0no646/EZSignWriter/actions/workflows/build-apk.yml)
+[ダウンロードページ（GitHub Releases）](https://github.com/xyx0no646/EZSignWriter/releases/latest)
 
-ビルドが成功した実行を開き、ページ下部の **Artifacts** から `EZSignWriter-debug-apk` をダウンロードしてください。
+GitHub Actionsで生成したデバッグ署名版APKを、Releasesに自動アップロードしています。スマートフォンから上記リンクを開き、ダウンロードした `EZSignWriter.apk` をインストールしてください。
+
+ビルド履歴やZIP形式の成果物は [GitHub Actions](https://github.com/xyx0no646/EZSignWriter/actions/workflows/build-apk.yml) でも確認できます。
 
 ## ビルド
 
