@@ -22,6 +22,11 @@ public final class SelfTest {
                 new int[]{0,1,2,3}, 4, 1, 2, DeviceInfo.Transform.NONE);
         check(Arrays.equals(p2.bytes, new byte[]{0x1B}), "2bpp packing");
 
+        PixelPacker.Packed groups = PixelPacker.transformAndPack(
+                new int[]{0,1,2,3, 3,2,1,0}, 8, 1, 2, DeviceInfo.Transform.NONE);
+        check(Arrays.equals(groups.bytes, new byte[]{0x1B, (byte)0xE4}),
+                "row byte-group order");
+
         byte[] raw = Protocol.rawChunk(0, 2, new byte[]{(byte)0xAA,(byte)0xBB,(byte)0xCC}, 0, 3);
         check(Hex.encode(raw).equals("F0D2000203AABBCC"), "F0D2 APDU");
         check(Hex.encode(Protocol.AUTH).equals("002000010420091210"), "AUTH APDU");
