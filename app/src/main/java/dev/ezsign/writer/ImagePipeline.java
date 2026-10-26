@@ -25,14 +25,34 @@ final class ImagePipeline {
 
     private ImagePipeline() {}
 
-    static Result prepare(Bitmap source, DeviceInfo spec) {
+    static Result prepare(Bitmap source, DeviceInfo spec, boolean mirrorCorrection) {
         Bitmap fitted = centerCrop(source, spec.width, spec.height);
         int[] indices = atkinson(fitted, spec.colors);
+
+        // Preview always shows the intended human-readable orientation.
         Bitmap preview = render(indices, spec.width, spec.height);
+
+        // Some EZ Sign firmware/panel combinations present the received image
+        // mirrored. Apply the correction only to the wire buffer, not preview.
+        int[] wireIndices = mirrorCorrection
+                ? flipHorizontal(indices, spec.width, spec.height)
+                : indices;
+
         PixelPacker.Packed packed = PixelPacker.transformAndPack(
-                indices, spec.width, spec.height, spec.bpp, spec.transform);
+                wireIndices, spec.width, spec.height, spec.bpp, spec.transform);
         if (fitted != source && fitted != preview) fitted.recycle();
         return new Result(preview, packed.bytes, packed.width, packed.height);
+    }
+
+    private static int[] flipHorizontal(int[] src, int w, int h) {
+        int[] out = new int[src.length];
+        for (int y = 0; y < h; y++) {
+            int row = y * w;
+            for (int x = 0; x < w; x++) {
+                out[row + x] = src[row + (w - 1 - x)];
+            }
+        }
+        return out;
     }
 
     static Bitmap centerCrop(Bitmap source, int targetW, int targetH) {
@@ -50,8 +70,6 @@ final class ImagePipeline {
         return out;
     }
 
-    // Higher-contrast Atkinson diffusion. It is less "wormy" than full
-    // Floyd-Steinberg on a low-resolution e-paper panel.
     private static int[] atkinson(Bitmap bitmap, int colors) {
         int w = bitmap.getWidth();
         int h = bitmap.getHeight();
@@ -96,7 +114,6 @@ final class ImagePipeline {
                 float eg = gg - palette[chosen][1];
                 float eb = bb - palette[chosen][2];
 
-                // Mirror Atkinson diffusion on odd rows to suppress directional banding.
                 spread(r,g,b,w,h,x + step,     y,     er,eg,eb,1f/8f);
                 spread(r,g,b,w,h,x + 2*step,   y,     er,eg,eb,1f/8f);
                 spread(r,g,b,w,h,x - step,     y + 1, er,eg,eb,1f/8f);
@@ -108,10 +125,6 @@ final class ImagePipeline {
         return out;
     }
 
-    // EZ Sign's four physical pigments are B/W/Y/R. Do not turn unsupported
-    // hues such as green/blue/purple into yellow just because RGB distance
-    // happens to make yellow numerically closest. Those hues are rendered as
-    // luminance (black/white dither) instead.
     private static int colorFamily(float r, float g, float b) {
         float max = Math.max(r, Math.max(g, b));
         float min = Math.min(r, Math.min(g, b));
@@ -128,7 +141,6 @@ final class ImagePipeline {
         }
         if (hue < 0f) hue += 360f;
 
-        // Keep yellow deliberately narrow so green does not become yellow.
         if (hue >= 38f && hue <= 72f && b < 175f) return FAMILY_YELLOW;
         if ((hue <= 24f || hue >= 342f) && r > g * 1.12f && r > b * 1.12f) return FAMILY_RED;
         return FAMILY_GRAY;
