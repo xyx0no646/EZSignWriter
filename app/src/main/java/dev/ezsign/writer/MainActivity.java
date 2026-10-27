@@ -244,7 +244,7 @@ public final class MainActivity extends Activity {
 
         colorModeSpinner = makeChoiceSpinner(
                 ColorMode.values(), colorMode.ordinal());
-        modeRow.addView(space(dp(8)), lp(dp(8), 1, 0));
+        modeRow.addView(space(dp(8)), lp(dp(8), dp(1), 0));
         modeRow.addView(spinnerField(colorModeSpinner), lp(0, dp(44), 1));
         root.addView(modeRow, margins(lp(-1, -2, 0), 0, 0, 0, dp(5)));
 
@@ -276,19 +276,19 @@ public final class MainActivity extends Activity {
         distanceLabel.setTextSize(13);
         distanceLabel.setTextColor(Color.BLACK);
         processRow.addView(distanceLabel, lp(-2, -2, 0));
-        processRow.addView(space(dp(7)), lp(dp(7), 1, 0));
+        processRow.addView(space(dp(7)), lp(dp(7), dp(1), 0));
 
         distanceSpinner = makeChoiceSpinner(
                 DistanceMode.values(), distanceMode.ordinal());
         processRow.addView(spinnerField(distanceSpinner), lp(0, dp(44), 1));
-        processRow.addView(space(dp(12)), lp(dp(12), 1, 0));
+        processRow.addView(space(dp(12)), lp(dp(12), dp(1), 0));
 
         TextView ditherLabel = new TextView(this);
         ditherLabel.setText("ディザ");
         ditherLabel.setTextSize(13);
         ditherLabel.setTextColor(Color.BLACK);
         processRow.addView(ditherLabel, lp(-2, -2, 0));
-        processRow.addView(space(dp(7)), lp(dp(7), 1, 0));
+        processRow.addView(space(dp(7)), lp(dp(7), dp(1), 0));
 
         ditherSpinner = makeChoiceSpinner(
                 DitherMode.values(), ditherMode.ordinal());
