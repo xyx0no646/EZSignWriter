@@ -22,12 +22,13 @@ final class ImagePipeline {
     private static final int FAMILY_GRAY = 0;
     private static final int FAMILY_YELLOW = 1;
     private static final int FAMILY_RED = 2;
+    private static final int FAMILY_BLUE = 3;
 
     private ImagePipeline() {}
 
-    static Result prepare(Bitmap source, DeviceInfo spec, boolean mirrorCorrection) {
+    static Result prepare(Bitmap source, DeviceInfo spec, boolean mirrorCorrection, ColorMode mode) {
         Bitmap fitted = centerCrop(source, spec.width, spec.height);
-        int[] indices = atkinson(fitted, spec.colors);
+        int[] indices = atkinson(fitted, spec.colors, mode);
 
         Bitmap preview = render(indices, spec.width, spec.height);
 
@@ -41,9 +42,9 @@ final class ImagePipeline {
         return new Result(preview, packed.bytes, packed.width, packed.height);
     }
 
-    static Bitmap preview(Bitmap source, int width, int height, int colors) {
+    static Bitmap preview(Bitmap source, int width, int height, int colors, ColorMode mode) {
         Bitmap fitted = centerCrop(source, width, height);
-        int[] indices = atkinson(fitted, colors);
+        int[] indices = atkinson(fitted, colors, mode);
         Bitmap out = render(indices, width, height);
         if (fitted != source && fitted != out) fitted.recycle();
         return out;
@@ -75,7 +76,7 @@ final class ImagePipeline {
         return out;
     }
 
-    private static int[] atkinson(Bitmap bitmap, int colors) {
+    private static int[] atkinson(Bitmap bitmap, int colors, ColorMode mode) {
         int w = bitmap.getWidth();
         int h = bitmap.getHeight();
         int n = w * h;
@@ -83,6 +84,7 @@ final class ImagePipeline {
         float[] g = new float[n];
         float[] b = new float[n];
         int[] family = new int[n];
+        float[] originalLum = new float[n];
         int[] argb = new int[n];
         bitmap.getPixels(argb, 0, w, 0, 0, w, h);
 
@@ -95,7 +97,8 @@ final class ImagePipeline {
             r[i] = rr;
             g[i] = gg;
             b[i] = bb;
-            family[i] = colors == 4 ? colorFamily(rr, gg, bb) : FAMILY_GRAY;
+            family[i] = colorFamily(rr, gg, bb);
+            originalLum[i] = luminance(rr, gg, bb);
         }
 
         int[] out = new int[n];
@@ -110,6 +113,17 @@ final class ImagePipeline {
                 float rr = clamp(r[i]);
                 float gg = clamp(g[i]);
                 float bb = clamp(b[i]);
+
+                // Pseudo-blue uses deterministic black/white so a clear shape
+                // or hatch survives. Do not spread its quantization error
+                // into nearby pixels. Standard mode is unchanged.
+                if (family[i] == FAMILY_BLUE && mode != ColorMode.STANDARD) {
+                    float lum = originalLum[i];
+                    out[i] = mode == ColorMode.PSEUDO_BLUE
+                            ? (lum < 215f ? BLACK : WHITE)
+                            : pseudoBluePattern(lum, x, y);
+                    continue;
+                }
 
                 int chosen = nearestAllowed(rr, gg, bb, colors, family[i]);
                 out[i] = chosen;
@@ -148,11 +162,12 @@ final class ImagePipeline {
 
         if (hue >= 38f && hue <= 72f && b < 175f) return FAMILY_YELLOW;
         if ((hue <= 24f || hue >= 342f) && r > g * 1.12f && r > b * 1.12f) return FAMILY_RED;
+        if (hue >= 185f && hue <= 260f && b > r * 1.08f && b > g * 1.02f) return FAMILY_BLUE;
         return FAMILY_GRAY;
     }
 
     private static int nearestAllowed(float r, float g, float b, int colors, int family) {
-        if (colors != 4 || family == FAMILY_GRAY) {
+        if (colors != 4 || family == FAMILY_GRAY || family == FAMILY_BLUE) {
             return luminance(r, g, b) >= 150f ? WHITE : BLACK;
         }
 
@@ -163,6 +178,12 @@ final class ImagePipeline {
 
         if (accentD <= blackD && accentD <= whiteD) return accent;
         return whiteD < blackD ? WHITE : BLACK;
+    }
+
+    /** 4-pixel diagonal hatching. Dark blue gets denser hatching. */
+    private static int pseudoBluePattern(float lum, int x, int y) {
+        int blackParts = lum < 100f ? 3 : (lum > 190f ? 1 : 2);
+        return ((x + y) & 3) < blackParts ? BLACK : WHITE;
     }
 
     private static float distance(float r, float g, float b, int[] p) {
