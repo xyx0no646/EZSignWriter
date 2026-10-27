@@ -63,6 +63,7 @@ app/build/outputs/apk/debug/app-debug.apk
 このプロジェクトの画像変換・NFC電子ペーパーへの書き込み方式を調査・実装するにあたり、以下のプロジェクトを参考にしました。
 
 - [redphx/dithr-beta](https://github.com/redphx/dithr-beta)
+- [ePaper Converter](https://epaper-converter.onrender.com/)
 
 本プロジェクトは独立したJava実装です。
 
