@@ -21,7 +21,7 @@ final class EzSignNfc {
     private EzSignNfc() {}
 
     static void write(Tag tag, SourceProvider sourceProvider,
-                      boolean mirrorCorrection, Listener listener)
+                      boolean mirrorCorrection, ColorMode mode, Listener listener)
             throws Exception {
         IsoDep iso = IsoDep.get(tag);
         if (iso == null) {
@@ -53,7 +53,7 @@ final class EzSignNfc {
             }
 
             ImagePipeline.Result image =
-                    ImagePipeline.prepare(source, info, mirrorCorrection);
+                    ImagePipeline.prepare(source, info, mirrorCorrection, mode);
             listener.onDevice(info, image.preview);
 
             writeRaw(iso, image.bytes, listener);
