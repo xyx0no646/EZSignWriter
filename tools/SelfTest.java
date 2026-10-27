@@ -48,6 +48,46 @@ public final class SelfTest {
                         && BlueEmulation.convert(182f, 2, 0, true) == 1,
                 "cyan hatch mode has two contrast levels");
 
+        float[] white = ColorMetrics.rgbToLab(255, 255, 255);
+        float[] black = ColorMetrics.rgbToLab(0, 0, 0);
+        float[] red = ColorMetrics.rgbToLab(255, 0, 0);
+        check(Math.abs(white[0] - 100f) < 0.05f, "Lab white L=100");
+        check(Math.abs(black[0]) < 0.05f, "Lab black L=0");
+        check(Math.abs(white[1]) < 0.05f && Math.abs(white[2]) < 0.05f,
+                "Lab white is neutral");
+        check(red[1] > 60f && red[2] > 40f, "Lab red hue");
+        check(ColorMetrics.squaredDeltaE(white, black) > 9900f,
+                "Lab white/black difference");
+        check(DistanceMode.fromOrdinal(-1) == DistanceMode.RGB,
+                "invalid distance defaults to RGB");
+        check(DitherMode.fromOrdinal(99) == DitherMode.ATKINSON,
+                "invalid dither defaults to Atkinson");
+        check(DitherKernel.totalWeight(DitherMode.STUCKI) == 42,
+                "Stucki kernel sum");
+        check(DitherKernel.totalWeight(DitherMode.ATKINSON) == 6,
+                "Atkinson kernel sum");
+
+        float[] dr = new float[8 * 5];
+        float[] dg = new float[8 * 5];
+        float[] db = new float[8 * 5];
+        DitherKernel.spread(dr, dg, db, 8, 5, 3, 0, 1,
+                42f, 0f, 0f, DitherMode.STUCKI);
+        float spreadSum = 0f;
+        for (float v : dr) spreadSum += v;
+        check(Math.abs(spreadSum - 42f) < 0.01f,
+                "Stucki spreads full error in middle");
+        check(Math.abs(dr[4] - 8f) < 0.01f
+                        && Math.abs(dr[5] - 4f) < 0.01f,
+                "Stucki near and far weights");
+
+        float[] reverse = new float[8 * 5];
+        DitherKernel.spread(reverse, new float[8 * 5], new float[8 * 5],
+                8, 5, 4, 0, -1, 42f, 0f, 0f, DitherMode.STUCKI);
+        for (int x = 0; x < 8; x++) {
+            check(Math.abs(dr[x] - reverse[7 - x]) < 0.01f,
+                    "Stucki reverse scan symmetry");
+        }
+
         System.out.println("SelfTest OK");
     }
 
