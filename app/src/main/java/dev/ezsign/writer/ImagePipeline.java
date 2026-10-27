@@ -144,6 +144,9 @@ final class ImagePipeline {
     }
 
     private static int colorFamily(float r, float g, float b) {
+        // Check blue/cyan first, so pale aqua isn't rejected by the
+        // stricter red/yellow chroma cutoff used below.
+        if (BlueEmulation.matches(r, g, b)) return FAMILY_BLUE;
         float max = Math.max(r, Math.max(g, b));
         float min = Math.min(r, Math.min(g, b));
         float chroma = max - min;
@@ -161,7 +164,6 @@ final class ImagePipeline {
 
         if (hue >= 38f && hue <= 72f && b < 175f) return FAMILY_YELLOW;
         if ((hue <= 24f || hue >= 342f) && r > g * 1.12f && r > b * 1.12f) return FAMILY_RED;
-        if (BlueEmulation.matches(r, g, b)) return FAMILY_BLUE;
         return FAMILY_GRAY;
     }
 
