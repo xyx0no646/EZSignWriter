@@ -43,7 +43,7 @@ final class BlueEmulation {
 
         // Alternating diagonal black/white stripes. Density preserves a
         // rough impression of light/dark blue without using warm pigments.
-        int blackParts = luminance < 100f ? 3 : (luminance > 190f ? 1 : 2);
+        int blackParts = luminance < 100f ? 3 : (luminance > 232f ? 1 : 2);
         return ((x + y) & 3) < blackParts ? 0 : 1;
     }
 }
