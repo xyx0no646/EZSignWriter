@@ -8,6 +8,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
@@ -20,6 +21,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
@@ -38,6 +40,8 @@ public final class MainActivity extends Activity {
     private static final String PREF_LARGE = "preview_large";
     private static final String PREF_COLORS = "preview_colors";
     private static final String PREF_COLOR_MODE = "color_mode";
+    private static final String PREF_DISTANCE = "distance_mode";
+    private static final String PREF_DITHER = "dither_mode";
 
     private NfcAdapter nfc;
     private PendingIntent nfcIntent;
@@ -51,6 +55,8 @@ public final class MainActivity extends Activity {
     private boolean previewLarge;
     private int previewColors = 4;
     private ColorMode colorMode = ColorMode.STANDARD;
+    private DistanceMode distanceMode = DistanceMode.RGB;
+    private DitherMode ditherMode = DitherMode.ATKINSON;
 
     private CropImageView cropView;
     private TextView status;
@@ -61,6 +67,8 @@ public final class MainActivity extends Activity {
     private Button outputPreviewButton;
     private CheckBox mirrorCheck;
     private Spinner colorModeSpinner;
+    private Spinner distanceSpinner;
+    private Spinner ditherSpinner;
     private ProgressBar progress;
 
     private final ExecutorService worker =
@@ -79,6 +87,10 @@ public final class MainActivity extends Activity {
                 prefs.getInt(PREF_COLORS, 4);
         colorMode = ColorMode.fromOrdinal(
                 prefs.getInt(PREF_COLOR_MODE, 0));
+        distanceMode = DistanceMode.fromOrdinal(
+                prefs.getInt(PREF_DISTANCE, 0));
+        ditherMode = DitherMode.fromOrdinal(
+                prefs.getInt(PREF_DITHER, 0));
 
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -230,15 +242,11 @@ public final class MainActivity extends Activity {
         modeLabel.setTextColor(Color.BLACK);
         modeRow.addView(modeLabel, lp(-2, -2, 0));
 
-        colorModeSpinner = new Spinner(this);
-        ArrayAdapter<ColorMode> modeAdapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item, ColorMode.values());
-        modeAdapter.setDropDownViewResource(
-                android.R.layout.simple_spinner_dropdown_item);
-        colorModeSpinner.setAdapter(modeAdapter);
-        colorModeSpinner.setSelection(colorMode.ordinal(), false);
-        modeRow.addView(colorModeSpinner, lp(0, dp(48), 1));
-        root.addView(modeRow, margins(lp(-1, -2, 0), 0, 0, 0, dp(6)));
+        colorModeSpinner = makeChoiceSpinner(
+                ColorMode.values(), colorMode.ordinal());
+        modeRow.addView(space(dp(8)), lp(dp(8), dp(1), 0));
+        modeRow.addView(spinnerField(colorModeSpinner), lp(0, dp(44), 1));
+        root.addView(modeRow, margins(lp(-1, -2, 0), 0, 0, 0, dp(5)));
 
         colorModeSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
@@ -256,6 +264,62 @@ public final class MainActivity extends Activity {
                 }
             }
 
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        LinearLayout processRow = new LinearLayout(this);
+        processRow.setOrientation(LinearLayout.HORIZONTAL);
+        processRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView distanceLabel = new TextView(this);
+        distanceLabel.setText("色差");
+        distanceLabel.setTextSize(13);
+        distanceLabel.setTextColor(Color.BLACK);
+        processRow.addView(distanceLabel, lp(-2, -2, 0));
+        processRow.addView(space(dp(7)), lp(dp(7), dp(1), 0));
+
+        distanceSpinner = makeChoiceSpinner(
+                DistanceMode.values(), distanceMode.ordinal());
+        processRow.addView(spinnerField(distanceSpinner), lp(0, dp(44), 1));
+        processRow.addView(space(dp(12)), lp(dp(12), dp(1), 0));
+
+        TextView ditherLabel = new TextView(this);
+        ditherLabel.setText("ディザ");
+        ditherLabel.setTextSize(13);
+        ditherLabel.setTextColor(Color.BLACK);
+        processRow.addView(ditherLabel, lp(-2, -2, 0));
+        processRow.addView(space(dp(7)), lp(dp(7), dp(1), 0));
+
+        ditherSpinner = makeChoiceSpinner(
+                DitherMode.values(), ditherMode.ordinal());
+        processRow.addView(spinnerField(ditherSpinner), lp(0, dp(44), 1));
+        root.addView(processRow, margins(lp(-1, -2, 0), 0, 0, 0, dp(6)));
+
+        distanceSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(
+                    AdapterView<?> parent, View view, int position, long id) {
+                DistanceMode selected = DistanceMode.fromOrdinal(position);
+                if (distanceMode == selected) return;
+                distanceMode = selected;
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(PREF_DISTANCE, selected.ordinal()).apply();
+                resetProcessingPreview("色差: " + selected.label);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        ditherSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(
+                    AdapterView<?> parent, View view, int position, long id) {
+                DitherMode selected = DitherMode.fromOrdinal(position);
+                if (ditherMode == selected) return;
+                ditherMode = selected;
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(PREF_DITHER, selected.ordinal()).apply();
+                resetProcessingPreview("ディザ: " + selected.label);
+            }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
 
@@ -327,7 +391,11 @@ public final class MainActivity extends Activity {
 
         outputPreviewButton.setEnabled(false);
         colorModeSpinner.setEnabled(false);
+        distanceSpinner.setEnabled(false);
+        ditherSpinner.setEnabled(false);
         final ColorMode selectedMode = colorMode;
+        final DistanceMode selectedDistance = distanceMode;
+        final DitherMode selectedDither = ditherMode;
         int w = previewLarge ? 400 : 296;
         int h = previewLarge ? 300 : 128;
         int colors = previewColors == 2 ? 2 : 4;
@@ -357,7 +425,9 @@ public final class MainActivity extends Activity {
                                 w,
                                 h,
                                 colors,
-                                selectedMode);
+                                selectedMode,
+                                selectedDistance,
+                                selectedDither);
 
                 if (crop != rendered) {
                     crop.recycle();
@@ -377,6 +447,8 @@ public final class MainActivity extends Activity {
                     outputPreviewButton.setText("編集");
                     outputPreviewButton.setEnabled(true);
                     colorModeSpinner.setEnabled(true);
+                    distanceSpinner.setEnabled(true);
+                    ditherSpinner.setEnabled(true);
                     status.setText(
                             "仕上がり PREVIEW · "
                                     + colors
@@ -386,6 +458,8 @@ public final class MainActivity extends Activity {
                 ui.post(() -> {
                     outputPreviewButton.setEnabled(true);
                     colorModeSpinner.setEnabled(true);
+                    distanceSpinner.setEnabled(true);
+                    ditherSpinner.setEnabled(true);
                     status.setText(
                             "プレビューエラー: "
                                     + compact(
@@ -441,6 +515,54 @@ public final class MainActivity extends Activity {
                 .putInt(
                         PREF_COLORS, previewColors)
                 .apply();
+    }
+
+    /** Light gray selection field with a visible dropdown indicator. */
+    private <T> Spinner makeChoiceSpinner(T[] values, int selected) {
+        Spinner spinner = new Spinner(this, Spinner.MODE_DROPDOWN);
+        ArrayAdapter<T> adapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item, values);
+        adapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+        spinner.setSelection(selected, false);
+        spinner.setBackground(roundedFill(Color.rgb(228, 229, 230)));
+        spinner.setPopupBackgroundDrawable(
+                roundedFill(Color.rgb(239, 240, 241)));
+        spinner.setPadding(dp(10), 0, dp(25), 0);
+        return spinner;
+    }
+
+    private GradientDrawable roundedFill(int color) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(dp(6));
+        bg.setStroke(dp(1), Color.rgb(195, 198, 200));
+        return bg;
+    }
+
+    private View spinnerField(Spinner spinner) {
+        FrameLayout frame = new FrameLayout(this);
+        frame.addView(spinner, new FrameLayout.LayoutParams(-1, -1));
+
+        TextView arrow = new TextView(this);
+        arrow.setText("▾");
+        arrow.setTextSize(17);
+        arrow.setTextColor(Color.DKGRAY);
+        arrow.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(
+                dp(27), -1, Gravity.END | Gravity.CENTER_VERTICAL);
+        frame.addView(arrow, p);
+        arrow.setOnClickListener(v -> {
+            if (spinner.isEnabled()) spinner.performClick();
+        });
+        return frame;
+    }
+
+    private void resetProcessingPreview(String message) {
+        cropView.clearOutputPreview();
+        outputPreviewButton.setText("仕上がり");
+        if (cropView.hasImage()) status.setText(message);
     }
 
     private Button makeButton(String text) {
@@ -632,6 +754,8 @@ public final class MainActivity extends Activity {
         resetButton.setEnabled(enabled);
         outputPreviewButton.setEnabled(enabled);
         colorModeSpinner.setEnabled(enabled);
+        distanceSpinner.setEnabled(enabled);
+        ditherSpinner.setEnabled(enabled);
         mirrorCheck.setEnabled(enabled);
         cropView.setEnabled(enabled);
     }
@@ -716,6 +840,8 @@ public final class MainActivity extends Activity {
         final boolean mirrorCorrection =
                 mirrorCheck.isChecked();
         final ColorMode selectedMode = colorMode;
+        final DistanceMode selectedDistance = distanceMode;
+        final DitherMode selectedDither = ditherMode;
 
         cropView.clearOutputPreview();
         outputPreviewButton.setText("仕上がり");
@@ -738,6 +864,8 @@ public final class MainActivity extends Activity {
                         this::createCropForDevice,
                         mirrorCorrection,
                         selectedMode,
+                        selectedDistance,
+                        selectedDither,
                         new EzSignNfc.Listener() {
                     @Override public void onStatus(
                             String text) {

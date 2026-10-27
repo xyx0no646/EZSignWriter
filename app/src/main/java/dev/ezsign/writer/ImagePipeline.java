@@ -19,6 +19,13 @@ final class ImagePipeline {
         {0, 0, 0}, {255, 255, 255}
     };
 
+    private static final float[][] LAB_PALETTE4 = {
+        ColorMetrics.rgbToLab(0, 0, 0),
+        ColorMetrics.rgbToLab(255, 255, 255),
+        ColorMetrics.rgbToLab(255, 220, 0),
+        ColorMetrics.rgbToLab(220, 0, 0)
+    };
+
     private static final int FAMILY_GRAY = 0;
     private static final int FAMILY_YELLOW = 1;
     private static final int FAMILY_RED = 2;
@@ -26,9 +33,10 @@ final class ImagePipeline {
 
     private ImagePipeline() {}
 
-    static Result prepare(Bitmap source, DeviceInfo spec, boolean mirrorCorrection, ColorMode mode) {
+    static Result prepare(Bitmap source, DeviceInfo spec, boolean mirrorCorrection,
+                          ColorMode mode, DistanceMode distanceMode, DitherMode ditherMode) {
         Bitmap fitted = centerCrop(source, spec.width, spec.height);
-        int[] indices = atkinson(fitted, spec.colors, mode);
+        int[] indices = quantize(fitted, spec.colors, mode, distanceMode, ditherMode);
 
         Bitmap preview = render(indices, spec.width, spec.height);
 
@@ -42,9 +50,10 @@ final class ImagePipeline {
         return new Result(preview, packed.bytes, packed.width, packed.height);
     }
 
-    static Bitmap preview(Bitmap source, int width, int height, int colors, ColorMode mode) {
+    static Bitmap preview(Bitmap source, int width, int height, int colors,
+                          ColorMode mode, DistanceMode distanceMode, DitherMode ditherMode) {
         Bitmap fitted = centerCrop(source, width, height);
-        int[] indices = atkinson(fitted, colors, mode);
+        int[] indices = quantize(fitted, colors, mode, distanceMode, ditherMode);
         Bitmap out = render(indices, width, height);
         if (fitted != source && fitted != out) fitted.recycle();
         return out;
@@ -76,7 +85,8 @@ final class ImagePipeline {
         return out;
     }
 
-    private static int[] atkinson(Bitmap bitmap, int colors, ColorMode mode) {
+    private static int[] quantize(Bitmap bitmap, int colors, ColorMode mode,
+                                   DistanceMode distanceMode, DitherMode ditherMode) {
         int w = bitmap.getWidth();
         int h = bitmap.getHeight();
         int n = w * h;
@@ -124,7 +134,7 @@ final class ImagePipeline {
                     continue;
                 }
 
-                int chosen = nearestAllowed(rr, gg, bb, colors, family[i]);
+                int chosen = nearestAllowed(rr, gg, bb, colors, family[i], distanceMode);
                 out[i] = chosen;
 
                 int[][] palette = colors == 4 ? PALETTE4 : PALETTE2;
@@ -132,12 +142,9 @@ final class ImagePipeline {
                 float eg = gg - palette[chosen][1];
                 float eb = bb - palette[chosen][2];
 
-                spread(r,g,b,w,h,x + step,     y,     er,eg,eb,1f/8f);
-                spread(r,g,b,w,h,x + 2*step,   y,     er,eg,eb,1f/8f);
-                spread(r,g,b,w,h,x - step,     y + 1, er,eg,eb,1f/8f);
-                spread(r,g,b,w,h,x,            y + 1, er,eg,eb,1f/8f);
-                spread(r,g,b,w,h,x + step,     y + 1, er,eg,eb,1f/8f);
-                spread(r,g,b,w,h,x,            y + 2, er,eg,eb,1f/8f);
+                DitherKernel.spread(
+                        r, g, b, w, h, x, y, step,
+                        er, eg, eb, ditherMode);
             }
         }
         return out;
@@ -167,16 +174,30 @@ final class ImagePipeline {
         return FAMILY_GRAY;
     }
 
-    private static int nearestAllowed(float r, float g, float b, int colors, int family) {
+    private static int nearestAllowed(float r, float g, float b, int colors,
+                                      int family, DistanceMode mode) {
+        if (mode == DistanceMode.LAB) {
+            float[] sampleLab = ColorMetrics.rgbToLab(r, g, b);
+            float blackD = ColorMetrics.squaredDeltaE(sampleLab, LAB_PALETTE4[BLACK]);
+            float whiteD = ColorMetrics.squaredDeltaE(sampleLab, LAB_PALETTE4[WHITE]);
+            int best = whiteD < blackD ? WHITE : BLACK;
+            if (colors != 4 || family == FAMILY_GRAY || family == FAMILY_BLUE) {
+                return best;
+            }
+            int accent = family == FAMILY_YELLOW ? YELLOW : RED;
+            float accentD = ColorMetrics.squaredDeltaE(sampleLab, LAB_PALETTE4[accent]);
+            return accentD <= blackD && accentD <= whiteD ? accent : best;
+        }
+
+        // RGB mode keeps the original v0.9.1 behavior.
         if (colors != 4 || family == FAMILY_GRAY || family == FAMILY_BLUE) {
             return luminance(r, g, b) >= 150f ? WHITE : BLACK;
         }
 
         int accent = family == FAMILY_YELLOW ? YELLOW : RED;
-        float blackD = distance(r,g,b,PALETTE4[BLACK]);
-        float whiteD = distance(r,g,b,PALETTE4[WHITE]);
-        float accentD = distance(r,g,b,PALETTE4[accent]);
-
+        float blackD = distance(r, g, b, PALETTE4[BLACK]);
+        float whiteD = distance(r, g, b, PALETTE4[WHITE]);
+        float accentD = distance(r, g, b, PALETTE4[accent]);
         if (accentD <= blackD && accentD <= whiteD) return accent;
         return whiteD < blackD ? WHITE : BLACK;
     }
@@ -190,15 +211,6 @@ final class ImagePipeline {
 
     private static float luminance(float r, float g, float b) {
         return 0.2126f*r + 0.7152f*g + 0.0722f*b;
-    }
-
-    private static void spread(float[] r, float[] g, float[] b, int w, int h,
-                               int x, int y, float er, float eg, float eb, float f) {
-        if (x < 0 || y < 0 || x >= w || y >= h) return;
-        int i = y * w + x;
-        r[i] += er * f;
-        g[i] += eg * f;
-        b[i] += eb * f;
     }
 
     private static float clamp(float x) { return Math.max(0f, Math.min(255f, x)); }
