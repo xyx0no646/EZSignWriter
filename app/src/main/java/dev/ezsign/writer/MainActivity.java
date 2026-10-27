@@ -16,10 +16,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import java.io.IOException;
@@ -34,6 +37,7 @@ public final class MainActivity extends Activity {
     private static final String PREFS = "ezsign";
     private static final String PREF_LARGE = "preview_large";
     private static final String PREF_COLORS = "preview_colors";
+    private static final String PREF_COLOR_MODE = "color_mode";
 
     private NfcAdapter nfc;
     private PendingIntent nfcIntent;
@@ -46,6 +50,7 @@ public final class MainActivity extends Activity {
 
     private boolean previewLarge;
     private int previewColors = 4;
+    private ColorMode colorMode = ColorMode.STANDARD;
 
     private CropImageView cropView;
     private TextView status;
@@ -55,6 +60,7 @@ public final class MainActivity extends Activity {
     private Button resetButton;
     private Button outputPreviewButton;
     private CheckBox mirrorCheck;
+    private Spinner colorModeSpinner;
     private ProgressBar progress;
 
     private final ExecutorService worker =
@@ -71,6 +77,8 @@ public final class MainActivity extends Activity {
                 prefs.getBoolean(PREF_LARGE, false);
         previewColors =
                 prefs.getInt(PREF_COLORS, 4);
+        colorMode = ColorMode.fromOrdinal(
+                prefs.getInt(PREF_COLOR_MODE, 0));
 
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -212,6 +220,45 @@ public final class MainActivity extends Activity {
                         lp(-1, -2, 0),
                         0, 0, 0, dp(6)));
 
+        LinearLayout modeRow = new LinearLayout(this);
+        modeRow.setOrientation(LinearLayout.HORIZONTAL);
+        modeRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView modeLabel = new TextView(this);
+        modeLabel.setText("色変換モード");
+        modeLabel.setTextSize(13);
+        modeLabel.setTextColor(Color.BLACK);
+        modeRow.addView(modeLabel, lp(-2, -2, 0));
+
+        colorModeSpinner = new Spinner(this);
+        ArrayAdapter<ColorMode> modeAdapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item, ColorMode.values());
+        modeAdapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item);
+        colorModeSpinner.setAdapter(modeAdapter);
+        colorModeSpinner.setSelection(colorMode.ordinal(), false);
+        modeRow.addView(colorModeSpinner, lp(0, dp(48), 1));
+        root.addView(modeRow, margins(lp(-1, -2, 0), 0, 0, 0, dp(6)));
+
+        colorModeSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(
+                    AdapterView<?> parent, View view, int position, long id) {
+                ColorMode selected = ColorMode.fromOrdinal(position);
+                if (colorMode == selected) return;
+                colorMode = selected;
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(PREF_COLOR_MODE, selected.ordinal()).apply();
+                cropView.clearOutputPreview();
+                outputPreviewButton.setText("仕上がり");
+                if (cropView.hasImage()) {
+                    status.setText("色変換モード: " + selected.label);
+                }
+            }
+
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
         LinearLayout buttons =
                 new LinearLayout(this);
         buttons.setOrientation(
@@ -279,6 +326,8 @@ public final class MainActivity extends Activity {
         }
 
         outputPreviewButton.setEnabled(false);
+        colorModeSpinner.setEnabled(false);
+        final ColorMode selectedMode = colorMode;
         int w = previewLarge ? 400 : 296;
         int h = previewLarge ? 300 : 128;
         int colors = previewColors == 2 ? 2 : 4;
@@ -307,7 +356,8 @@ public final class MainActivity extends Activity {
                                 crop,
                                 w,
                                 h,
-                                colors);
+                                colors,
+                                selectedMode);
 
                 if (crop != rendered) {
                     crop.recycle();
@@ -326,6 +376,7 @@ public final class MainActivity extends Activity {
                     cropView.setOutputPreview(rendered);
                     outputPreviewButton.setText("編集");
                     outputPreviewButton.setEnabled(true);
+                    colorModeSpinner.setEnabled(true);
                     status.setText(
                             "仕上がり PREVIEW · "
                                     + colors
@@ -334,6 +385,7 @@ public final class MainActivity extends Activity {
             } catch (Exception e) {
                 ui.post(() -> {
                     outputPreviewButton.setEnabled(true);
+                    colorModeSpinner.setEnabled(true);
                     status.setText(
                             "プレビューエラー: "
                                     + compact(
@@ -579,6 +631,7 @@ public final class MainActivity extends Activity {
         previewSizeButton.setEnabled(enabled);
         resetButton.setEnabled(enabled);
         outputPreviewButton.setEnabled(enabled);
+        colorModeSpinner.setEnabled(enabled);
         mirrorCheck.setEnabled(enabled);
         cropView.setEnabled(enabled);
     }
@@ -662,6 +715,7 @@ public final class MainActivity extends Activity {
     private void startWrite(Tag tag) {
         final boolean mirrorCorrection =
                 mirrorCheck.isChecked();
+        final ColorMode selectedMode = colorMode;
 
         cropView.clearOutputPreview();
         outputPreviewButton.setText("仕上がり");
@@ -683,6 +737,7 @@ public final class MainActivity extends Activity {
                         tag,
                         this::createCropForDevice,
                         mirrorCorrection,
+                        selectedMode,
                         new EzSignNfc.Listener() {
                     @Override public void onStatus(
                             String text) {
